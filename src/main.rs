@@ -1,0 +1,104 @@
+//
+// Structured Search Replace (SSR)
+//
+use std::path::PathBuf;
+
+use clap::{Args, Parser, Subcommand};
+
+use ssr::{Document, Language};
+
+type Error = Box<dyn std::error::Error + Send + Sync + 'static>;
+type Result<T> = std::result::Result<T, Error>;
+
+/// SSR - Strucuted Search and Replace.
+#[derive(Debug, Parser)]
+#[command(version, about, long_about = None)]
+struct Options {
+    #[command(subcommand)]
+    command: SsrCommand,
+}
+
+#[derive(Debug, Subcommand)]
+enum SsrCommand {
+    /// Show tree sitter CST of a file.
+    Tree(Tree),
+
+    /// Apply query against all files.
+    Search(Search),
+
+    /// Use query to search in all files and use replace command to replace matches.
+    Replace(Replace),
+}
+
+#[derive(Debug, Args)]
+struct Tree {
+    /// Which language to use.
+    #[arg(short, long)]
+    language: Language,
+    /// Files to apply the query to
+    file: PathBuf,
+}
+
+#[derive(Debug, Args)]
+struct Search {
+    /// Which language to use.
+    #[arg(short, long)]
+    language: Language,
+    /// Tree-Sitter query as s-expression:
+    /// https://tree-sitter.github.io/tree-sitter/using-parsers#pattern-matching-with-queries
+    #[arg(short, long)]
+    query: String,
+    /// List of files to apply the query to
+    files: Vec<PathBuf>,
+}
+
+#[derive(Debug, Args)]
+struct Replace {
+    /// Which language to use.
+    #[arg(short, long)]
+    language: Language,
+    /// Tree-Sitter query as s-expression:
+    /// https://tree-sitter.github.io/tree-sitter/using-parsers#pattern-matching-with-queries
+    #[arg(short, long)]
+    query: String,
+    /// List of files to apply the query to
+    files: Vec<PathBuf>,
+}
+
+impl SsrCommand {
+    fn run(&self) -> Result<()> {
+        match self {
+            Self::Tree(cmd) => cmd.run(),
+            Self::Search(cmd) => cmd.run(),
+            Self::Replace(cmd) => cmd.run(),
+        }
+    }
+}
+
+impl Tree {
+    fn run(&self) -> Result<()> {
+        let doc = Document::open(&self.file, self.language)?;
+        let mut out = std::io::stdout().lock();
+        doc.write_tree(&mut out)?;
+
+        Ok(())
+    }
+}
+
+impl Search {
+    fn run(&self) -> Result<()> {
+        todo!();
+    }
+}
+
+impl Replace {
+    fn run(&self) -> Result<()> {
+        todo!();
+    }
+}
+
+fn main() -> Result<()> {
+    let options = Options::parse();
+
+    options.command.run()
+}
