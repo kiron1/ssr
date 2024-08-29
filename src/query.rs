@@ -1,23 +1,35 @@
-pub struct Query {}
+pub struct Query {
+    pub(crate) query: tree_sitter::Query,
+}
 
+type Result<T> = std::result::Result<T, Error>;
+
+#[derive(Debug)]
+pub struct Error {
+    inner: tree_sitter::QueryError,
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, mut f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("query error: ")?;
+        self.inner.fmt(&mut f)
+    }
+}
+
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.inner)
+    }
+}
 
 impl Query {
-    pub fn match(&self) -> Result {
-        
-        let mut qcursor = tree_sitter::QueryCursor::new();
-        let matches = qcursor.matches(&query, tree.root_node(), content.as_slice());
-        for m in matches {
-            let id = m.id();
-            let pi = m.pattern_index;
-            for capture in m.captures {
-                let start = capture.node.start_position();
-                let end = capture.node.end_position();
-                let i = capture.index;
-                let capture_name = query.capture_names()[capture.index as usize];
-                let capture = capture.node.utf8_text(content.as_slice())?;
-                println!("{id} {start} {end} {i} {pi} {capture_name} {capture}");
-            }
-            // let capture m.nodes_for_capture_index();
-        }
+    pub fn new(language: &crate::Language, source: &str) -> Result<Self> {
+        let query = tree_sitter::Query::new(&language.language(), source)
+            .map_err(|inner| Error { inner })?;
+        Ok(Self { query })
     }
- }
+
+    pub fn capture_name(&self, index: u32) -> &str {
+        self.query.capture_names()[index as usize]
+    }
+}

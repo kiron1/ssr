@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand};
 
-use ssr::{Document, Language};
+use ssr::{Document, Language, Query};
 
 type Error = Box<dyn std::error::Error + Send + Sync + 'static>;
 type Result<T> = std::result::Result<T, Error>;
@@ -77,7 +77,7 @@ impl SsrCommand {
 
 impl Tree {
     fn run(&self) -> Result<()> {
-        let doc = Document::open(&self.file, self.language)?;
+        let doc = Document::open(&self.file, &self.language)?;
         let mut out = std::io::stdout().lock();
         doc.write_tree(&mut out)?;
 
@@ -87,7 +87,31 @@ impl Tree {
 
 impl Search {
     fn run(&self) -> Result<()> {
-        todo!();
+        let doc = Document::open(&self.files[0], &self.language)?;
+
+        let lw = (doc.lines().count() as f32).log10().floor() as usize;
+
+        for m in doc.find(&Query::new(&self.language, &self.query)?)? {
+            for c in m.captures() {
+                println!(
+                    "{}  capture: {} [{}]",
+                    (0..lw).map(|_| ' ').collect::<String>(),
+                    c.name(),
+                    m.pattner_index()
+                );
+                for (k, line) in doc
+                    .lines()
+                    .skip(c.start_position().row)
+                    .take(c.end_position().row - c.start_position().row + 1)
+                    .enumerate()
+                {
+                    println!("{:lw$}: {line}", k + c.start_position().row + 1)
+                }
+            }
+            println!();
+        }
+
+        Ok(())
     }
 }
 

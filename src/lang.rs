@@ -9,6 +9,15 @@ pub enum Language {
 #[derive(Debug)]
 pub struct Error;
 
+impl Language {
+    pub(crate) fn language(&self) -> tree_sitter::Language {
+        match self {
+            Self::Python => tree_sitter_python::language(),
+            Self::Rust => tree_sitter_rust::language(),
+        }
+    }
+}
+
 impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("invalid language")
@@ -38,14 +47,5 @@ impl FromStr for Language {
             _ => return Err(Error),
         };
         Ok(ret)
-    }
-}
-
-impl Into<tree_sitter::Language> for Language {
-    fn into(self) -> tree_sitter::Language {
-        match self {
-            Self::Python => tree_sitter_python::language(),
-            Self::Rust => tree_sitter_rust::language(),
-        }
     }
 }
