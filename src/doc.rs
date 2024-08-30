@@ -69,7 +69,7 @@ impl Capture {
         &self.range.end_point
     }
     pub fn text(&self) -> &str {
-        &self.text.as_str()
+        self.text.as_str()
     }
 }
 
@@ -98,9 +98,9 @@ type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("Compiling error: {0}")]
-    CompilerError(String),
+    Compile(String),
     #[error("Script error in {0}: {1}")]
-    ScriptError(PathBuf, String),
+    Script(PathBuf, String),
     #[error("Failed to parse document")]
     ParsingFailed(PathBuf),
     #[error("Query error: {0}")]
@@ -112,7 +112,7 @@ pub enum Error {
 }
 
 impl Document {
-    pub fn open<P: AsRef<Path>>(path: P, lang: &Language) -> std::io::Result<Self> {
+    pub fn open<P: AsRef<Path>>(path: P, lang: Language) -> std::io::Result<Self> {
         let content = std::fs::read_to_string(path.as_ref())?;
 
         let mut parser = tree_sitter::Parser::new();
@@ -125,7 +125,7 @@ impl Document {
 
         Ok(Self {
             path: path.as_ref().to_owned(),
-            lang: lang.clone(),
+            lang,
             content,
             parser,
             tree,
@@ -159,7 +159,7 @@ impl Document {
                 pattern: m.pattern_index,
                 captures: m
                     .captures
-                    .into_iter()
+                    .iter()
                     .map(|c| Capture {
                         index: c.index,
                         name: query.capture_name(c.index).to_owned(),
@@ -187,7 +187,7 @@ impl Document {
         };
         let ast = engine
             .compile(script)
-            .map_err(|e| Error::CompilerError(e.to_string()))?;
+            .map_err(|e| Error::Compile(e.to_string()))?;
         let found = self
             .find(&crate::Query::new(&self.lang, query)?)?
             .collect::<Vec<_>>();
@@ -203,7 +203,7 @@ impl Document {
                 .eval_ast_with_scope::<rhai::Dynamic>(&mut scope, &ast)
                 .map_err({
                     let p = self.path.to_owned();
-                    |e| Error::ScriptError(p, e.to_string())
+                    |e| Error::Script(p, e.to_string())
                 })?;
         }
         self.apply_edits(edits)?;
@@ -329,7 +329,7 @@ struct DocumentEdits {
 impl DocumentEdits {
     fn edits(self) -> Vec<Edit> {
         let mut e = self.edits.lock().unwrap();
-        std::mem::replace(&mut *e, Vec::default())
+        std::mem::take(&mut *e)
     }
 }
 

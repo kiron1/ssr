@@ -80,7 +80,7 @@ impl SsrCommand {
 
 impl Tree {
     fn run(&self) -> Result<()> {
-        let doc = Document::open(&self.file, &self.language)?;
+        let doc = Document::open(&self.file, self.language)?;
         let mut out = std::io::stdout().lock();
         doc.write_tree(&mut out)?;
 
@@ -90,7 +90,7 @@ impl Tree {
 
 impl Search {
     fn run(&self) -> Result<()> {
-        let doc = Document::open(&self.files[0], &self.language)?;
+        let doc = Document::open(&self.files[0], self.language)?;
 
         let lw = (doc.lines().count() as f32).log10().floor() as usize;
 
@@ -120,7 +120,7 @@ impl Search {
 
 impl Replace {
     fn run(&self) -> Result<()> {
-        let mut doc = Document::open(&self.files[0], &self.language)?;
+        let mut doc = Document::open(&self.files[0], self.language)?;
 
         doc.edit(&self.query, &self.replacement)?;
         println!("{}", doc.content());
