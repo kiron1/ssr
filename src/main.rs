@@ -61,6 +61,9 @@ struct Replace {
     /// https://tree-sitter.github.io/tree-sitter/using-parsers#pattern-matching-with-queries
     #[arg(short, long)]
     query: String,
+    /// Replacement script.
+    #[arg(short, long)]
+    replacement: String,
     /// List of files to apply the query to
     files: Vec<PathBuf>,
 }
@@ -97,7 +100,7 @@ impl Search {
                     "{}  capture: {} [{}]",
                     (0..lw).map(|_| ' ').collect::<String>(),
                     c.name(),
-                    m.pattner_index()
+                    m.pattern_index()
                 );
                 for (k, line) in doc
                     .lines()
@@ -117,7 +120,11 @@ impl Search {
 
 impl Replace {
     fn run(&self) -> Result<()> {
-        todo!();
+        let mut doc = Document::open(&self.files[0], &self.language)?;
+
+        doc.edit(&self.query, &self.replacement)?;
+        println!("{}", doc.content());
+        Ok(())
     }
 }
 
