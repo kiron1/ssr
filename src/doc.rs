@@ -9,7 +9,7 @@ pub struct Document {
     path: PathBuf,
     lang: Language,
     content: String,
-    parser: tree_sitter::Parser,
+    // parser: tree_sitter::Parser,
     tree: tree_sitter::Tree,
 }
 
@@ -101,43 +101,64 @@ pub enum Error {
     Compile(String),
     #[error("Script error in {0}: {1}")]
     Script(PathBuf, String),
+    #[error("Language error: {0}")]
+    Language(
+        #[from]
+        #[source]
+        tree_sitter::LanguageError,
+    ),
     #[error("Failed to parse document")]
-    ParsingFailed(PathBuf),
+    ParsingFailed,
     #[error("Query error: {0}")]
     Query(
         #[from]
         #[source]
         crate::query::Error,
     ),
+    #[error("I/O error in {0}: {1}")]
+    Io(PathBuf, #[source] std::io::Error),
 }
 
 impl Document {
-    pub fn open<P: AsRef<Path>>(path: P, lang: Language) -> std::io::Result<Self> {
-        let content = std::fs::read_to_string(path.as_ref())?;
+    pub fn open<P: AsRef<Path>>(path: P, lang: Language) -> Result<Self> {
+        let content = std::fs::read_to_string(path.as_ref()).map_err(|e| {
+            let p = path.as_ref().to_owned();
+            Error::Io(p, e)
+        })?;
 
         let mut parser = tree_sitter::Parser::new();
-        parser
-            .set_language(&lang.language())
-            .map_err(std::io::Error::other)?;
-        let tree = parser
-            .parse(&content, None)
-            .ok_or_else(|| std::io::Error::other("failed to parse"))?;
+        parser.set_language(&lang.language())?;
+        let tree = parser.parse(&content, None).ok_or(Error::ParsingFailed)?;
 
         Ok(Self {
             path: path.as_ref().to_owned(),
             lang,
             content,
-            parser,
+            // parser,
             tree,
         })
     }
 
-    pub fn path(&self) -> PathBuf {
-        self.path.to_owned()
+    pub fn with_content(path: PathBuf, lang: Language, content: String) -> Result<Self> {
+        let mut parser = tree_sitter::Parser::new();
+        parser.set_language(&lang.language())?;
+        let tree = parser.parse(&content, None).ok_or(Error::ParsingFailed)?;
+
+        Ok(Self {
+            path,
+            lang,
+            content,
+            // parser,
+            tree,
+        })
     }
 
-    pub fn content(&self) -> String {
-        self.content.clone()
+    pub fn path(&self) -> &Path {
+        self.path.as_path()
+    }
+
+    pub fn content(&self) -> &str {
+        self.content.as_str()
     }
 
     pub fn lines(&self) -> impl Iterator<Item = String> {
@@ -177,7 +198,7 @@ impl Document {
         Ok(matches)
     }
 
-    pub fn edit(&mut self, query: &str, script: &str) -> Result<()> {
+    pub fn edit(&self, query: &str, script: &str) -> Result<Self> {
         let engine = {
             let mut engine = rhai::Engine::new();
             engine.build_type::<DocumentEdits>();
@@ -206,56 +227,56 @@ impl Document {
                     |e| Error::Script(p, e.to_string())
                 })?;
         }
-        self.apply_edits(edits)?;
-        Ok(())
+        self.apply_edits(edits.changes())
     }
 
-    fn apply_edits(&mut self, edits: DocumentEdits) -> Result<()> {
-        let edits = {
-            let mut e = edits.edits();
+    fn apply_edits(&self, changes: impl Iterator<Item = Change>) -> Result<Self> {
+        let changes = {
+            let mut e = changes.collect::<Vec<_>>();
             // Sort edits in *reverse* by edit start position.
             e.sort_by(|b, a| a.range.start_byte.cmp(&b.range.start_byte));
             e
         };
-        for edit in edits {
-            let new_lines = edit.replacement.bytes().filter(|c| *c == b'\n').count();
+        let mut content = self.content.clone();
+        for edit in changes {
+            // let new_lines = edit.replacement.bytes().filter(|c| *c == b'\n').count();
 
-            let new_end_row = if new_lines == 0 {
-                edit.range.start_point.row + edit.replacement.len()
-            } else {
-                edit.replacement
-                    .split('\n')
-                    .last()
-                    .unwrap_or_default()
-                    .len()
-            };
+            // let new_end_row = if new_lines == 0 {
+            //     edit.range.start_point.row + edit.replacement.len()
+            // } else {
+            //     edit.replacement
+            //         .split('\n')
+            //         .last()
+            //         .unwrap_or_default()
+            //         .len()
+            // };
 
-            let new_end_position = tree_sitter::Point {
-                row: new_end_row,
-                column: edit.range.start_point.column + new_lines,
-            };
-            let input_edit = tree_sitter::InputEdit {
-                start_byte: edit.range.start_byte,
-                old_end_byte: edit.range.end_byte,
-                new_end_byte: edit.replacement.len(),
-                start_position: edit.range.start_point,
-                old_end_position: edit.range.end_point,
-                new_end_position,
-            };
-            self.tree.edit(&input_edit);
-            self.content = {
-                let mut t = self.content[0..edit.range.start_byte].to_owned();
+            // let new_end_position = tree_sitter::Point {
+            //     row: new_end_row,
+            //     column: edit.range.start_point.column + new_lines,
+            // };
+            // let input_edit = tree_sitter::InputEdit {
+            //     start_byte: edit.range.start_byte,
+            //     old_end_byte: edit.range.end_byte,
+            //     new_end_byte: edit.replacement.len(),
+            //     start_position: edit.range.start_point,
+            //     old_end_position: edit.range.end_point,
+            //     new_end_position,
+            // };
+            // self.tree.edit(&input_edit);
+            content = {
+                let mut t = content[0..edit.range.start_byte].to_owned();
                 t.push_str(edit.replacement.as_str());
-                t.push_str(&self.content[edit.range.end_byte..]);
+                t.push_str(&content[edit.range.end_byte..]);
                 t
             };
         }
-        self.tree = self.parser.parse(&self.content, Some(&self.tree)).ok_or({
-            let p = self.path.to_owned();
-            Error::ParsingFailed(p)
-        })?;
+        // self.tree = self
+        //     .parser
+        //     .parse(&self.content, Some(&self.tree))
+        //     .ok_or(Error::ParsingFailed)?;
 
-        Ok(())
+        Self::with_content(self.path.to_owned(), self.lang, content)
     }
 
     pub fn write_tree(&self, mut out: &mut impl std::io::Write) -> std::io::Result<()> {
@@ -313,23 +334,33 @@ impl Document {
         }
         Ok(())
     }
+
+    pub fn diff(&self, other: &Self) -> String {
+        let a = format!("a/{}", self.path.display());
+        let b = format!("b/{}", other.path.display());
+        similar::TextDiff::from_lines(self.content.as_str(), other.content.as_str())
+            .unified_diff()
+            .context_radius(5)
+            .header(a.as_str(), b.as_str())
+            .to_string()
+    }
 }
 
 #[derive(Debug, Clone)]
-struct Edit {
+struct Change {
     range: tree_sitter::Range,
     replacement: String,
 }
 
 #[derive(Debug, Default, Clone)]
 struct DocumentEdits {
-    edits: Arc<Mutex<Vec<Edit>>>,
+    edits: Arc<Mutex<Vec<Change>>>,
 }
 
 impl DocumentEdits {
-    fn edits(self) -> Vec<Edit> {
+    fn changes(self) -> impl Iterator<Item = Change> {
         let mut e = self.edits.lock().unwrap();
-        std::mem::take(&mut *e)
+        std::mem::take(&mut *e).into_iter()
     }
 }
 
@@ -338,7 +369,10 @@ impl rhai::CustomType for DocumentEdits {
         builder
             .with_name("Document")
             .with_fn("edit", |this: &mut Self, range, replacement| {
-                this.edits.lock().unwrap().push(Edit { range, replacement });
+                this.edits
+                    .lock()
+                    .unwrap()
+                    .push(Change { range, replacement });
             });
     }
 }

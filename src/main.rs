@@ -120,10 +120,11 @@ impl Search {
 
 impl Replace {
     fn run(&self) -> Result<()> {
-        let mut doc = Document::open(&self.files[0], self.language)?;
-
-        doc.edit(&self.query, &self.replacement)?;
-        println!("{}", doc.content());
+        for p in &self.files {
+            let doc = Document::open(p, self.language)?;
+            let new = doc.edit(&self.query, &self.replacement)?;
+            println!("{}", doc.diff(&new));
+        }
         Ok(())
     }
 }
