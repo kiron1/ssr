@@ -39,28 +39,35 @@ struct Tree {
     file: PathBuf,
 }
 
-#[derive(Debug, Args)]
-struct Search {
+#[derive(Debug, Clone, Args)]
+struct QueryOptions {
     /// Which language to use.
     #[arg(short, long)]
     language: Language,
     /// Tree-Sitter query as s-expression:
     /// https://tree-sitter.github.io/tree-sitter/using-parsers#pattern-matching-with-queries
-    #[arg(short, long)]
-    query: String,
+    #[arg(short = 'q', long = "query")]
+    source: String,
+}
+
+impl QueryOptions {
+    fn query(&self) -> std::result::Result<Query, ssr::QueryError> {
+        Query::new(self.language, self.source.as_str())
+    }
+}
+
+#[derive(Debug, Args)]
+struct Search {
+    #[command(flatten)]
+    query: QueryOptions,
     /// List of files to apply the query to
     files: Vec<PathBuf>,
 }
 
 #[derive(Debug, Args)]
 struct Replace {
-    /// Which language to use.
-    #[arg(short, long)]
-    language: Language,
-    /// Tree-Sitter query as s-expression:
-    /// https://tree-sitter.github.io/tree-sitter/using-parsers#pattern-matching-with-queries
-    #[arg(short, long)]
-    query: String,
+    #[command(flatten)]
+    query: QueryOptions,
     /// Replacement script.
     #[arg(short, long)]
     replacement: String,
@@ -90,11 +97,11 @@ impl Tree {
 
 impl Search {
     fn run(&self) -> Result<()> {
-        let doc = Document::open(&self.files[0], self.language)?;
+        let doc = Document::open(&self.files[0], self.query.language)?;
 
         let lw = (doc.lines().count() as f32).log10().floor() as usize;
 
-        for m in doc.find(&Query::new(&self.language, &self.query)?)? {
+        for m in doc.find(&self.query.query()?)? {
             for c in m.captures() {
                 println!(
                     "{}  capture: {} [{}]",
@@ -121,8 +128,8 @@ impl Search {
 impl Replace {
     fn run(&self) -> Result<()> {
         for p in &self.files {
-            let doc = Document::open(p, self.language)?;
-            let new = doc.edit(&self.query, &self.replacement)?;
+            let doc = Document::open(p, self.query.language)?;
+            let new = doc.edit(&self.query.source, &self.replacement)?;
             println!("{}", doc.diff(&new));
         }
         Ok(())

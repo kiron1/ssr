@@ -210,7 +210,7 @@ impl Document {
             .compile(script)
             .map_err(|e| Error::Compile(e.to_string()))?;
         let found = self
-            .find(&crate::Query::new(&self.lang, query)?)?
+            .find(&crate::Query::new(self.lang, query)?)?
             .collect::<Vec<_>>();
 
         let edits = DocumentEdits::default();

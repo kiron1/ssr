@@ -23,7 +23,7 @@ impl std::error::Error for Error {
 }
 
 impl Query {
-    pub fn new(language: &crate::Language, source: &str) -> Result<Self> {
+    pub fn new(language: crate::Language, source: &str) -> Result<Self> {
         let query = tree_sitter::Query::new(&language.language(), source)
             .map_err(|inner| Error { inner })?;
         Ok(Self { query })

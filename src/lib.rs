@@ -6,4 +6,5 @@ pub use doc::Capture;
 pub use doc::Document;
 pub use doc::Match;
 pub use lang::Language;
+pub use query::Error as QueryError;
 pub use query::Query;
