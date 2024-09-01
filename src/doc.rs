@@ -1,6 +1,5 @@
 use crate::Language;
 use std::{
-    fmt::Debug,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
@@ -335,14 +334,39 @@ impl Document {
         Ok(())
     }
 
-    pub fn diff(&self, other: &Self) -> String {
-        let a = format!("a/{}", self.path.display());
-        let b = format!("b/{}", other.path.display());
-        similar::TextDiff::from_lines(self.content.as_str(), other.content.as_str())
+    pub fn diff<'old, 'new>(&'old self, other: &'new Self) -> Patch<'old, 'new> {
+        Patch::<'old, 'new> {
+            old: self,
+            new: other,
+            // diff,
+        }
+    }
+}
+
+pub struct Patch<'old, 'new> {
+    old: &'old Document,
+    new: &'new Document,
+    // diff: similar::TextDiff<'old, 'new, 'bufs, str>,
+}
+
+impl<'old, 'new> Patch<'old, 'new> {
+    pub fn is_same(&self) -> bool {
+        self.old.content == self.new.content
+    }
+    pub fn is_changed(&self) -> bool {
+        !self.is_same()
+    }
+}
+
+impl<'old, 'new> std::fmt::Display for Patch<'old, 'new> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let a = format!("a/{}", self.old.path.display());
+        let b = format!("b/{}", self.new.path.display());
+        similar::TextDiff::from_lines(self.old.content.as_str(), self.new.content.as_str())
             .unified_diff()
             .context_radius(5)
             .header(a.as_str(), b.as_str())
-            .to_string()
+            .fmt(f)
     }
 }
 

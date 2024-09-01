@@ -76,7 +76,7 @@ struct Replace {
 }
 
 impl SsrCommand {
-    fn run(&self) -> Result<()> {
+    fn run(&self) -> Result<std::process::ExitCode> {
         match self {
             Self::Tree(cmd) => cmd.run(),
             Self::Search(cmd) => cmd.run(),
@@ -86,22 +86,24 @@ impl SsrCommand {
 }
 
 impl Tree {
-    fn run(&self) -> Result<()> {
+    fn run(&self) -> Result<std::process::ExitCode> {
         let doc = Document::open(&self.file, self.language)?;
         let mut out = std::io::stdout().lock();
         doc.write_tree(&mut out)?;
 
-        Ok(())
+        Ok(std::process::ExitCode::SUCCESS)
     }
 }
 
 impl Search {
-    fn run(&self) -> Result<()> {
+    fn run(&self) -> Result<std::process::ExitCode> {
+        let mut found = false;
         let doc = Document::open(&self.files[0], self.query.language)?;
 
         let lw = (doc.lines().count() as f32).log10().floor() as usize;
 
         for m in doc.find(&self.query.query()?)? {
+            found = found || true;
             for c in m.captures() {
                 println!(
                     "{}  capture: {} [{}]",
@@ -120,23 +122,33 @@ impl Search {
             }
             println!();
         }
-
-        Ok(())
+        Ok(if found {
+            std::process::ExitCode::SUCCESS
+        } else {
+            std::process::ExitCode::FAILURE
+        })
     }
 }
 
 impl Replace {
-    fn run(&self) -> Result<()> {
+    fn run(&self) -> Result<std::process::ExitCode> {
+        let mut changed = false;
         for p in &self.files {
             let doc = Document::open(p, self.query.language)?;
             let new = doc.edit(&self.query.source, &self.replacement)?;
-            println!("{}", doc.diff(&new));
+            let patch = doc.diff(&new);
+            changed = changed || patch.is_changed();
+            println!("{}", &patch);
         }
-        Ok(())
+        Ok(if changed {
+            std::process::ExitCode::SUCCESS
+        } else {
+            std::process::ExitCode::FAILURE
+        })
     }
 }
 
-fn main() -> Result<()> {
+fn main() -> Result<std::process::ExitCode> {
     let options = Options::parse();
 
     options.command.run()
