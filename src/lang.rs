@@ -42,7 +42,7 @@ impl FromStr for Language {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let s = s.trim().to_ascii_lowercase();
         let ret = match s.as_str() {
-            "python" => Self::Python,
+            "bazel" | "python" => Self::Python,
             "rust" => Self::Rust,
             _ => return Err(Error),
         };
