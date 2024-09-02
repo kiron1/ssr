@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
+ignore = "0.4.22"
 rhai = "1.19"
 similar = "2.6"
 thiserror = "1.0"

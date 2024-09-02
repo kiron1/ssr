@@ -56,12 +56,65 @@ impl QueryOptions {
     }
 }
 
+#[derive(Debug, Clone, Args)]
+struct WalkOptions {
+    /// File types to search for
+    #[arg(short = 't', long = "type")]
+    ftype: Option<String>,
+    /// Add a new file type.
+    #[arg(long = "type-add")]
+    type_defs: Vec<String>,
+    /// Paths to walk for files.
+    paths: Vec<PathBuf>,
+}
+
+impl WalkOptions {
+    fn walker(
+        &self,
+    ) -> std::result::Result<
+        impl Iterator<Item = std::result::Result<ignore::DirEntry, ignore::Error>>,
+        ignore::Error,
+    > {
+        let types = {
+            let mut types = ignore::types::TypesBuilder::new();
+            types.add_defaults();
+            for tdef in self.type_defs.iter() {
+                types.add_def(tdef.as_str())?;
+            }
+            if let Some(ftype) = &self.ftype {
+                types.select(ftype.as_str());
+            }
+            types.build()?
+        };
+
+        let cwd = PathBuf::from(".");
+        let mut paths = self.paths.iter().fuse();
+        let mut w = ignore::WalkBuilder::new(paths.next().unwrap_or_else(|| &cwd));
+        for p in paths {
+            w.add(p);
+        }
+        w.types(types);
+        let iter = w.build().into_iter().filter(|p| {
+            p.as_ref()
+                .map(|ref p| {
+                    if let Ok(m) = p.metadata() {
+                        m.is_file()
+                    } else {
+                        false
+                    }
+                })
+                .unwrap_or(false)
+        });
+        Ok(iter)
+    }
+}
+
 #[derive(Debug, Args)]
 struct Search {
     #[command(flatten)]
     query: QueryOptions,
-    /// List of files to apply the query to
-    files: Vec<PathBuf>,
+    #[command(flatten)]
+    walk: WalkOptions,
 }
 
 #[derive(Debug, Args)]
@@ -71,8 +124,8 @@ struct Replace {
     /// Replacement script.
     #[arg(short, long)]
     replacement: String,
-    /// List of files to apply the query to
-    files: Vec<PathBuf>,
+    #[command(flatten)]
+    walk: WalkOptions,
 }
 
 impl SsrCommand {
@@ -98,29 +151,33 @@ impl Tree {
 impl Search {
     fn run(&self) -> Result<std::process::ExitCode> {
         let mut found = false;
-        let doc = Document::open(&self.files[0], self.query.language)?;
+        for p in self.walk.walker()? {
+            let p = p?;
+            let p = p.path();
+            let doc = Document::open(p, self.query.language)?;
 
-        let lw = (doc.lines().count() as f32).log10().floor() as usize;
+            let lw = (doc.lines().count() as f32).log10().floor() as usize;
 
-        for m in doc.find(&self.query.query()?)? {
-            found = found || true;
-            for c in m.captures() {
-                println!(
-                    "{}  capture: {} [{}]",
-                    (0..lw).map(|_| ' ').collect::<String>(),
-                    c.name(),
-                    m.pattern_index()
-                );
-                for (k, line) in doc
-                    .lines()
-                    .skip(c.start_position().row)
-                    .take(c.end_position().row - c.start_position().row + 1)
-                    .enumerate()
-                {
-                    println!("{:lw$}: {line}", k + c.start_position().row + 1)
+            for m in doc.find(&self.query.query()?)? {
+                found = found || true;
+                for c in m.captures() {
+                    println!(
+                        "{}  capture: {} [{}]",
+                        (0..lw).map(|_| ' ').collect::<String>(),
+                        c.name(),
+                        m.pattern_index()
+                    );
+                    for (k, line) in doc
+                        .lines()
+                        .skip(c.start_position().row)
+                        .take(c.end_position().row - c.start_position().row + 1)
+                        .enumerate()
+                    {
+                        println!("{:lw$}: {line}", k + c.start_position().row + 1)
+                    }
                 }
+                println!();
             }
-            println!();
         }
         Ok(if found {
             std::process::ExitCode::SUCCESS
@@ -133,7 +190,9 @@ impl Search {
 impl Replace {
     fn run(&self) -> Result<std::process::ExitCode> {
         let mut changed = false;
-        for p in &self.files {
+        for p in self.walk.walker()? {
+            let p = p?;
+            let p = p.path();
             let doc = Document::open(p, self.query.language)?;
             let new = doc.edit(&self.query.source, &self.replacement)?;
             let patch = doc.diff(&new);
