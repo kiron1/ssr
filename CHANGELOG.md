@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/kiron1/ssr/compare/v0.1.1...v0.2.0) (2025-12-23)
+
+
+### Features
+
+* use query languge for file walker ([1cf89b0](https://github.com/kiron1/ssr/commit/1cf89b0f9cf0edd62348f3c8f2f9eb761bffc0b8))
+
 ## [0.1.1](https://github.com/kiron1/ssr/compare/v0.1.0...v0.1.1) (2025-12-23)
 
 
