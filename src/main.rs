@@ -191,7 +191,13 @@ impl Replace {
     fn run(&self) -> Result<std::process::ExitCode> {
         let mut changed = false;
         for p in self.walk.walker()? {
-            let p = p?;
+            let p = match p {
+                Ok(p) => p,
+                Err(e) => {
+                    eprintln!("failed to process: {e}");
+                    continue;
+                }
+            };
             let p = p.path();
             let doc = Document::open(p, self.query.language)?;
             let new = doc.edit(&self.query.source, &self.replacement)?;
