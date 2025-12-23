@@ -89,14 +89,14 @@ impl WalkOptions {
 
         let cwd = PathBuf::from(".");
         let mut paths = self.paths.iter().fuse();
-        let mut w = ignore::WalkBuilder::new(paths.next().unwrap_or_else(|| &cwd));
+        let mut w = ignore::WalkBuilder::new(paths.next().unwrap_or(&cwd));
         for p in paths {
             w.add(p);
         }
         w.types(types);
-        let iter = w.build().into_iter().filter(|p| {
+        let iter = w.build().filter(|p| {
             p.as_ref()
-                .map(|ref p| {
+                .map(|p| {
                     if let Ok(m) = p.metadata() {
                         m.is_file()
                     } else {
@@ -159,7 +159,7 @@ impl Search {
             let lw = (doc.lines().count() as f32).log10().floor() as usize;
 
             for m in doc.find(&self.query.query()?)? {
-                found = found || true;
+                found = true;
                 for c in m.captures() {
                     println!(
                         "{}  capture: {} [{}]",
