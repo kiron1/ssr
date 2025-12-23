@@ -58,9 +58,6 @@ impl QueryOptions {
 
 #[derive(Debug, Clone, Args)]
 struct WalkOptions {
-    /// File types to search for
-    #[arg(short = 't', long = "type")]
-    ftype: Option<String>,
     /// Add a new file type.
     #[arg(long = "type-add")]
     type_defs: Vec<String>,
@@ -71,6 +68,7 @@ struct WalkOptions {
 impl WalkOptions {
     fn walker(
         &self,
+        language: &str,
     ) -> std::result::Result<
         impl Iterator<Item = std::result::Result<ignore::DirEntry, ignore::Error>>,
         ignore::Error,
@@ -81,9 +79,7 @@ impl WalkOptions {
             for tdef in self.type_defs.iter() {
                 types.add_def(tdef.as_str())?;
             }
-            if let Some(ftype) = &self.ftype {
-                types.select(ftype.as_str());
-            }
+            types.select(language);
             types.build()?
         };
 
@@ -151,7 +147,7 @@ impl Tree {
 impl Search {
     fn run(&self) -> Result<std::process::ExitCode> {
         let mut found = false;
-        for p in self.walk.walker()? {
+        for p in self.walk.walker(self.query.language.as_str())? {
             let p = p?;
             let p = p.path();
             let doc = Document::open(p, self.query.language)?;
@@ -190,7 +186,7 @@ impl Search {
 impl Replace {
     fn run(&self) -> Result<std::process::ExitCode> {
         let mut changed = false;
-        for p in self.walk.walker()? {
+        for p in self.walk.walker(self.query.language.as_str())? {
             let p = match p {
                 Ok(p) => p,
                 Err(e) => {
