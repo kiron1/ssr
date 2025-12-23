@@ -196,8 +196,10 @@ impl Replace {
             let doc = Document::open(p, self.query.language)?;
             let new = doc.edit(&self.query.source, &self.replacement)?;
             let patch = doc.diff(&new);
-            changed = changed || patch.is_changed();
-            println!("{}", &patch);
+            if patch.is_changed() {
+                changed = true;
+                println!("{}", &patch);
+            }
         }
         Ok(if changed {
             std::process::ExitCode::SUCCESS
