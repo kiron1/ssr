@@ -13,7 +13,7 @@ on:
 jobs:
 
   cargo:
-    name: Cargo test
+    name: Cargo build and test
     runs-on: ubuntu-latest
 
     steps:
@@ -45,14 +45,8 @@ jobs:
     name: Success gate
     if: always()
     needs:
-      - bazel_test
-      - bazel_check
-      - bazel_www
-      - cargo_build
-      - cargo_test
-      - mkrelease
-      - version
-    runs-on: ubuntu-24.04
+      - cargo
+    runs-on: ubuntu-latest
     steps:
       - run: jq --exit-status 'all(.result == "success")' <<< '${{ toJson(needs) }}'
       - name: Done
