@@ -34,7 +34,7 @@ use:
 ```sh
 ssr replace --language rust \
   --query '((expression_statement ((macro_invocation macro: (identifier) @m (#eq? @m "dbg")))) @exp)' \
-  --replacement 'for m in found.captures { if.name == "exp { document.edit(m.range, "println!"); } }'
+  --replacement 'for m in found.captures { if m.name == "exp" { document.edit(m.range, "println!"); } }'
 ```
 
 [ts-query]: https://tree-sitter.github.io/tree-sitter/using-parsers#query-syntax "Tree-Sitter Query Syntax"
