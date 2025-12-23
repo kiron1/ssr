@@ -1,0 +1,59 @@
+name: main
+
+defaults:
+  run:
+    shell: bash --noprofile --norc -euo pipefail {0}
+
+on:
+  pull_request:
+    branches:
+      - main
+  merge_group:
+
+jobs:
+
+  cargo:
+    name: Cargo test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+      - name: Run cargo test
+        run: cargo test
+      - name: Run cargo build
+        run: cargo build
+      - name: Run cargo clippy
+        run: cargo clippy
+      - name: Run cargo format check
+        run: cargo fmt --check
+
+  # The success job is here to consolidate the total success/failure state of
+  # all other jobs. This job is then included in the GitHub branch protection
+  # rule which prevents merges unless all other jobs are passing. This makes
+  # it easier to manage the list of jobs via this yml file and to prevent
+  # accidentally adding new jobs without also updating the branch protections.
+  success:
+    name: Success gate
+    if: always()
+    needs:
+      - bazel_test
+      - bazel_check
+      - bazel_www
+      - cargo_build
+      - cargo_test
+      - mkrelease
+      - version
+    runs-on: ubuntu-24.04
+    steps:
+      - run: jq --exit-status 'all(.result == "success")' <<< '${{ toJson(needs) }}'
+      - name: Done
+        run: exit 0
